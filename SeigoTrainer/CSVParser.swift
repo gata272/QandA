@@ -1,29 +1,63 @@
 import Foundation
 
 enum CSVParseError: Error, LocalizedError {
+    case emptyFile
+    case zipFile
+    case pdfFile
     case unreadableEncoding
-    case noQuestions
+    case noQuestions(rows: Int, bytes: Int)
 
     var errorDescription: String? {
         switch self {
+        case .emptyFile:
+            return "ファイルの中身が空でした。iCloud上のファイルの場合は、ファイルアプリでダウンロードを完了させてから選び直してください"
+        case .zipFile:
+            return "ZIPファイルが選ばれています。解凍して中身のCSVファイルを選んでください"
+        case .pdfFile:
+            return "PDFファイルが選ばれています。CSVファイルを選んでください"
         case .unreadableEncoding:
-            return "ファイルの文字コードを読み取れませんでした（UTF-8 / Shift_JIS に対応しています）"
-        case .noQuestions:
-            return "問題が1件も見つかりませんでした。形式（番号,表面,裏面,解説）を確認してください"
+            return "ファイルの文字コードを読み取れませんでした（UTF-8 / UTF-16 / Shift_JIS に対応しています）"
+        case .noQuestions(let rows, let bytes):
+            return "問題が1件も見つかりませんでした。形式（番号,表面,裏面,解説）を確認してください（読み取れた行数：\(rows)、ファイルサイズ：\(bytes)バイト）"
         }
     }
 }
 
 /// 「番号,表面,裏面,解説」形式のCSVを読む。
 /// クォート内のカンマ・改行・二重クォート（""）に対応する。
-/// 区切りはカンマが基本で、タブ区切り（TSV）も自動判定する。
+/// 区切り文字はカンマ／タブ／セミコロン／全角カンマから自動判定する。
 struct CSVParser {
     static func parse(data: Data) throws -> [Question] {
+        if data.isEmpty {
+            throw CSVParseError.emptyFile
+        }
+        // ZIP / PDF を間違えて選んだ場合は専用の案内を出す
+        let head = [UInt8](data.prefix(4))
+        if head.count >= 2 && head[0] == 0x50 && head[1] == 0x4B {
+            throw CSVParseError.zipFile
+        }
+        if head.count >= 4 && head[0] == 0x25 && head[1] == 0x50 && head[2] == 0x44 && head[3] == 0x46 {
+            throw CSVParseError.pdfFile
+        }
         guard let text = decode(data) else {
             throw CSVParseError.unreadableEncoding
         }
-        let delimiter = detectDelimiter(text)
-        let rows = parseRows(text, delimiter: delimiter)
+
+        // 区切り文字の候補を順に試し、問題が取れたものを採用する
+        let candidates = delimiterCandidates(text)
+        var bestRows = 0
+        for delimiter in candidates {
+            let rows = parseRows(text, delimiter: delimiter)
+            bestRows = max(bestRows, rows.count)
+            let questions = questions(from: rows)
+            if !questions.isEmpty {
+                return questions
+            }
+        }
+        throw CSVParseError.noQuestions(rows: bestRows, bytes: data.count)
+    }
+
+    static func questions(from rows: [[String]]) -> [Question] {
         var questions: [Question] = []
         var sequential = 0
         for (index, row) in rows.enumerated() {
@@ -39,39 +73,52 @@ struct CSVParser {
             let explanation = row.count > 3 ? row[3] : ""
             questions.append(Question(number: number, front: front, back: back, explanation: explanation))
         }
-        if questions.isEmpty {
-            throw CSVParseError.noQuestions
-        }
         return questions
     }
 
     static func decode(_ data: Data) -> String? {
+        // UTF-8（BOM可）
         if let s = String(data: data, encoding: .utf8) {
-            if s.hasPrefix("\u{FEFF}") {
-                return String(s.dropFirst())
-            }
-            return s
+            return stripBOM(s)
         }
+        // UTF-16（BOMで LE/BE を判定）
+        if let s = String(data: data, encoding: .utf16) {
+            return stripBOM(s)
+        }
+        // Shift_JIS
         if let s = String(data: data, encoding: .shiftJIS) {
-            return s
+            return stripBOM(s)
         }
         return nil
     }
 
-    static func detectDelimiter(_ text: String) -> Character {
-        let firstLine = text.prefix { $0 != "\n" }
-        if firstLine.contains("\t") {
-            return "\t"
+    static func stripBOM(_ s: String) -> String {
+        if s.hasPrefix("\u{FEFF}") {
+            return String(s.dropFirst())
         }
-        return ","
+        return s
     }
 
-    static func parseRows(_ text: String, delimiter: Character) -> [[String]] {
+    /// 最初の数行に多く現れる区切り文字を優先して候補を返す。
+    static func delimiterCandidates(_ text: String) -> [Unicode.Scalar] {
+        let sample = text.unicodeScalars.prefix(4000)
+        var counts: [Unicode.Scalar: Int] = [:]
+        let all: [Unicode.Scalar] = [",", "\t", ";", "，"]
+        for scalar in sample where all.contains(scalar) {
+            counts[scalar, default: 0] += 1
+        }
+        let sorted = all.sorted { (counts[$0] ?? 0) > (counts[$1] ?? 0) }
+        return sorted
+    }
+
+    /// 文字ではなく Unicode スカラー単位で走査する。
+    /// （Swift の Character では CRLF が1文字に合体してしまい、改行判定をすり抜けるため）
+    static func parseRows(_ text: String, delimiter: Unicode.Scalar) -> [[String]] {
         var rows: [[String]] = []
         var row: [String] = []
         var field = ""
         var inQuotes = false
-        let chars = Array(text)
+        let scalars = Array(text.unicodeScalars)
         var i = 0
 
         func endField() {
@@ -84,12 +131,12 @@ struct CSVParser {
             row = []
         }
 
-        while i < chars.count {
-            let c = chars[i]
+        while i < scalars.count {
+            let c = scalars[i]
             if inQuotes {
                 if c == "\"" {
-                    if i + 1 < chars.count && chars[i + 1] == "\"" {
-                        field.append("\"")
+                    if i + 1 < scalars.count && scalars[i + 1] == "\"" {
+                        field.unicodeScalars.append("\"")
                         i += 2
                         continue
                     }
@@ -97,7 +144,7 @@ struct CSVParser {
                     i += 1
                     continue
                 }
-                field.append(c)
+                field.unicodeScalars.append(c)
                 i += 1
                 continue
             } else {
@@ -112,7 +159,7 @@ struct CSVParser {
                     continue
                 }
                 if c == "\r" {
-                    if i + 1 < chars.count && chars[i + 1] == "\n" {
+                    if i + 1 < scalars.count && scalars[i + 1] == "\n" {
                         i += 1
                     }
                     endRow()
@@ -124,7 +171,7 @@ struct CSVParser {
                     i += 1
                     continue
                 }
-                field.append(c)
+                field.unicodeScalars.append(c)
                 i += 1
                 continue
             }
