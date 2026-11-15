@@ -4,7 +4,22 @@ struct ContentView: View {
     @StateObject private var store = SetStore()
     @State private var showPicker = false
     @State private var importError: String? = nil
+    @State private var importNotice: String? = nil
     @State private var isImporting = false
+    @State private var activeSheet: ActiveSheet? = nil
+    @State private var renameText = ""
+
+    private enum ActiveSheet: Identifiable {
+        case rename(LoadedSet)
+        case merge(LoadedSet)
+
+        var id: String {
+            switch self {
+            case .rename(let set): return "rename-" + set.id
+            case .merge(let set): return "merge-" + set.id
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -13,12 +28,12 @@ struct ContentView: View {
                     ContentUnavailableView {
                         Label("問題集がありません", systemImage: "books.vertical")
                     } description: {
-                        Text("CSVファイル（番号,表面,裏面,解説）を読み込むと、アプリ内に保存されます")
+                        Text("CSVファイル（番号,表面,裏面,解説）、またはCSV入りのZIPを読み込むと、アプリ内に保存されます")
                     } actions: {
                         Button {
                             showPicker = true
                         } label: {
-                            Text("CSVを読み込む")
+                            Text("CSV / ZIPを読み込む")
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -43,11 +58,44 @@ struct ContentView: View {
                                     .foregroundStyle(.secondary)
                                 }
                             }
+                            .contextMenu {
+                                Button {
+                                    renameText = set.name
+                                    activeSheet = .rename(set)
+                                } label: {
+                                    Label("名前を変更", systemImage: "pencil")
+                                }
+                                Button {
+                                    store.duplicateSet(id: set.id)
+                                } label: {
+                                    Label("複製する", systemImage: "doc.on.doc")
+                                }
+                                if store.sets.count >= 2 {
+                                    Button {
+                                        activeSheet = .merge(set)
+                                    } label: {
+                                        Label("他の問題集と合わせる", systemImage: "square.stack.3d.up")
+                                    }
+                                }
+                                Button(role: .destructive) {
+                                    store.deleteSet(id: set.id)
+                                } label: {
+                                    Label("削除", systemImage: "trash")
+                                }
+                            }
                         }
                         .onDelete { offsets in
                             for i in offsets {
                                 store.deleteSet(id: store.sets[i].id)
                             }
+                        }
+                    }
+                    .sheet(item: $activeSheet) { sheet in
+                        switch sheet {
+                        case .rename(let set):
+                            renameView(set)
+                        case .merge(let set):
+                            mergeView(set)
                         }
                     }
                 }
@@ -92,23 +140,117 @@ struct ContentView: View {
             } message: {
                 Text(importError ?? "")
             }
+            .alert("読み込みました", isPresented: Binding(
+                get: { importNotice != nil },
+                set: { if !$0 { importNotice = nil } }
+            )) {
+                Button("OK") { importNotice = nil }
+            } message: {
+                Text(importNotice ?? "")
+            }
         }
     }
+
+    // MARK: - 名前変更
+
+    private func renameView(_ set: LoadedSet) -> some View {
+        NavigationStack {
+            Form {
+                Section("問題集の名前") {
+                    TextField("名前", text: $renameText)
+                }
+                Section {
+                    Text("元の名前: \(set.name)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("名前を変更")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { activeSheet = nil }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        store.renameSet(id: set.id, name: renameText)
+                        activeSheet = nil
+                    }
+                    .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    // MARK: - マージ
+
+    private func mergeView(_ source: LoadedSet) -> some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(store.sets.filter { $0.id != source.id }) { other in
+                        Button {
+                            store.mergeSets(firstID: source.id, secondID: other.id)
+                            activeSheet = nil
+                            importNotice = "「\(source.name)」と「\(other.name)」を合わせた新しい問題集を作りました。元の2つはそのまま残っています（問題番号は先頭から振り直しました）"
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(other.name)
+                                        .foregroundStyle(.primary)
+                                    Text("全\(other.questions.count)問")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("「\(source.name)」（\(source.questions.count)問）と合わせる相手")
+                } footer: {
+                    Text("合わせると合計 \(source.questions.count) 問＋相手の問題数の、新しい問題集ができます。")
+                }
+            }
+            .navigationTitle("問題集を合わせる")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { activeSheet = nil }
+                }
+            }
+        }
+    }
+
+    // MARK: - 読み込み
 
     private func importFile(_ url: URL) {
         isImporting = true
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 let data = try Data(contentsOf: url)
-                let questions = try CSVParser.parse(data: data)
-                let name = url.deletingPathExtension().lastPathComponent
-                DispatchQueue.main.async {
-                    do {
-                        try store.addSet(name: name, questions: questions)
-                    } catch {
-                        importError = error.localizedDescription
+                let head = [UInt8](data.prefix(2))
+                let isZip = url.pathExtension.lowercased() == "zip" || head == [0x50, 0x4B]
+                if isZip {
+                    let result = try ZipImporter.extractQuestionSets(data: data)
+                    DispatchQueue.main.async {
+                        finishZipImport(result: result)
                     }
-                    isImporting = false
+                } else {
+                    let questions = try CSVParser.parse(data: data)
+                    let name = url.deletingPathExtension().lastPathComponent
+                    DispatchQueue.main.async {
+                        do {
+                            try store.addSet(name: name, questions: questions)
+                            importNotice = "「\(name)」（\(questions.count)問）を追加しました"
+                        } catch {
+                            importError = error.localizedDescription
+                        }
+                        isImporting = false
+                    }
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -117,5 +259,33 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private func finishZipImport(result: (sets: [(name: String, questions: [Question])],
+                                           failures: [(name: String, message: String)])) {
+        var added: [(name: String, count: Int)] = []
+        for item in result.sets {
+            do {
+                try store.addSet(name: item.name, questions: item.questions)
+                added.append((name: item.name, count: item.questions.count))
+            } catch {
+                // 保存に失敗したものは失敗扱いにする
+            }
+        }
+        var parts: [String] = []
+        if added.count == 1 {
+            parts.append("「\(added[0].name)」（\(added[0].count)問）を追加しました")
+        } else if added.count > 1 {
+            parts.append("\(added.count)件の問題集（合計\(added.reduce(0) { $0 + $1.count })問）を追加しました")
+        }
+        if !result.failures.isEmpty {
+            parts.append("読めなかったファイル: " + result.failures.map { $0.name }.joined(separator: "、"))
+        }
+        if added.isEmpty {
+            importError = result.failures.first?.message ?? "読み込めませんでした"
+        } else {
+            importNotice = parts.joined(separator: "\n")
+        }
+        isImporting = false
     }
 }

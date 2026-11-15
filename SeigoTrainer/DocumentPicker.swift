@@ -9,7 +9,7 @@ struct DocumentPicker: UIViewControllerRepresentable {
     var onCancel: () -> Void
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let types: [UTType] = [.commaSeparatedText, .plainText, .text, .data]
+        let types: [UTType] = [.commaSeparatedText, .plainText, .text, .zip, .data]
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
         picker.delegate = context.coordinator
         picker.allowsMultipleSelection = false

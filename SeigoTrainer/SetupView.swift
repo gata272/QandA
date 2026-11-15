@@ -7,31 +7,12 @@ struct SetupView: View {
     @State private var mode = 0 // 0: 範囲指定, 1: 全問, 2: 間違えた問題だけ
     @State private var startNumber = 1
     @State private var endNumber = 40
-    @State private var chunkSize = 40
     @AppStorage("seigoShuffle") private var shuffle = false
     @State private var startQuiz = false
     @State private var didInitRange = false
 
     private var set: LoadedSet? {
         store.sets.first { $0.id == setID }
-    }
-
-    private var sortedNumbers: [Int] {
-        guard let set else { return [] }
-        return set.questions.map { $0.number }.sorted()
-    }
-
-    private var chunks: [(start: Int, end: Int)] {
-        let nums = sortedNumbers
-        guard chunkSize > 0, !nums.isEmpty else { return [] }
-        var result: [(start: Int, end: Int)] = []
-        var i = 0
-        while i < nums.count {
-            let j = min(i + chunkSize, nums.count) - 1
-            result.append((start: nums[i], end: nums[j]))
-            i += chunkSize
-        }
-        return result
     }
 
     private var selectedQuestions: [Question] {
@@ -87,6 +68,14 @@ struct SetupView: View {
                         }
                     }
 
+                    Section {
+                        NavigationLink {
+                            QuestionListView(store: store, setID: setID)
+                        } label: {
+                            Label("問題一覧・編集", systemImage: "list.bullet.rectangle")
+                        }
+                    }
+
                     if mode == 0 {
                         Section("範囲（問題番号）") {
                             Stepper(value: $startNumber, in: set.minNumber...set.maxNumber) {
@@ -102,32 +91,6 @@ struct SetupView: View {
                                     Spacer()
                                     Text("No.\(endNumber)").foregroundStyle(.secondary)
                                 }
-                            }
-                        }
-
-                        Section("区切りから選ぶ") {
-                            Picker("1区切りの問題数", selection: $chunkSize) {
-                                Text("20問").tag(20)
-                                Text("40問").tag(40)
-                                Text("50問").tag(50)
-                                Text("100問").tag(100)
-                            }
-                            .pickerStyle(.segmented)
-                            ForEach(Array(chunks.enumerated()), id: \.offset) { _, chunk in
-                                Button {
-                                    startNumber = chunk.start
-                                    endNumber = chunk.end
-                                } label: {
-                                    HStack {
-                                        Text("No.\(chunk.start) 〜 \(chunk.end)")
-                                        Spacer()
-                                        if startNumber == chunk.start && endNumber == chunk.end {
-                                            Image(systemName: "checkmark")
-                                                .foregroundStyle(.blue)
-                                        }
-                                    }
-                                }
-                                .foregroundStyle(.primary)
                             }
                         }
                     }
@@ -154,7 +117,7 @@ struct SetupView: View {
                     if !didInitRange {
                         didInitRange = true
                         startNumber = set.minNumber
-                        endNumber = min(set.minNumber + chunkSize - 1, set.maxNumber)
+                        endNumber = min(set.minNumber + 39, set.maxNumber)
                     }
                 }
                 .navigationDestination(isPresented: $startQuiz) {

@@ -83,14 +83,65 @@ final class SetStore: ObservableObject {
         sets = loaded.sorted { $0.importedAt > $1.importedAt }
     }
 
-    func addSet(name: String, questions: [Question]) throws {
-        let id = UUID().uuidString
-        let file = QuestionSetFile(id: id, name: name, importedAt: Date(), questions: questions)
+    private func writeSetFile(_ file: QuestionSetFile) throws {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(file)
-        try data.write(to: setFileURL(id: id), options: .atomic)
-        sets.insert(LoadedSet(id: id, name: name, importedAt: file.importedAt, questions: questions, stats: [:]), at: 0)
+        try data.write(to: setFileURL(id: file.id), options: .atomic)
+    }
+
+    private func writeStats(id: String, stats: [Int: QuestionStat]) {
+        if let data = try? JSONEncoder().encode(stats) {
+            try? data.write(to: statsFileURL(id: id), options: .atomic)
+        }
+    }
+
+    @discardableResult
+    func addSet(name: String, questions: [Question], stats: [Int: QuestionStat] = [:]) throws -> LoadedSet {
+        let file = QuestionSetFile(id: UUID().uuidString, name: name, importedAt: Date(), questions: questions)
+        try writeSetFile(file)
+        if !stats.isEmpty {
+            writeStats(id: file.id, stats: stats)
+        }
+        let loaded = LoadedSet(id: file.id, name: name, importedAt: file.importedAt, questions: questions, stats: stats)
+        sets.insert(loaded, at: 0)
+        return loaded
+    }
+
+    func renameSet(id: String, name: String) {
+        guard let idx = sets.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        sets[idx].name = trimmed
+        let set = sets[idx]
+        try? writeSetFile(QuestionSetFile(id: set.id, name: set.name, importedAt: set.importedAt, questions: set.questions))
+    }
+
+    func duplicateSet(id: String) {
+        guard let set = sets.first(where: { $0.id == id }) else { return }
+        try? addSet(name: set.name + "のコピー", questions: set.questions, stats: set.stats)
+    }
+
+    /// 2つの問題集を合わせた新しい問題集を作る。元の2つはそのまま残す。
+    /// 問題番号は重複を避けるため、先頭から 1,2,3… と振り直す（成績も番号に紐づくため）。
+    func mergeSets(firstID: String, secondID: String) {
+        guard let a = sets.first(where: { $0.id == firstID }),
+              let b = sets.first(where: { $0.id == secondID }) else { return }
+        let combined = (a.questions + b.questions).enumerated().map { idx, q in
+            Question(number: idx + 1, front: q.front, back: q.back, explanation: q.explanation)
+        }
+        try? addSet(name: "\(a.name) + \(b.name)", questions: combined)
+    }
+
+    /// 問題の編集・削除を保存する。消えた番号の成績は破棄する。
+    func updateQuestions(id: String, questions: [Question]) {
+        guard let idx = sets.firstIndex(where: { $0.id == id }) else { return }
+        sets[idx].questions = questions
+        let numbers = Set(questions.map { $0.number })
+        sets[idx].stats = sets[idx].stats.filter { numbers.contains($0.key) }
+        let set = sets[idx]
+        try? writeSetFile(QuestionSetFile(id: set.id, name: set.name, importedAt: set.importedAt, questions: set.questions))
+        writeStats(id: id, stats: set.stats)
     }
 
     func deleteSet(id: String) {
