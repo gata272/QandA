@@ -8,6 +8,8 @@ struct ContentView: View {
     @State private var isImporting = false
     @State private var activeSheet: ActiveSheet? = nil
     @State private var renameText = ""
+    @State private var editMode: EditMode = .inactive
+    @State private var selectedIDs: Set<String> = []
 
     private enum ActiveSheet: Identifiable {
         case rename(LoadedSet)
@@ -38,7 +40,7 @@ struct ContentView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    List {
+                    List(selection: $selectedIDs) {
                         ForEach(store.sets) { set in
                             NavigationLink {
                                 SetupView(store: store, setID: set.id)
@@ -58,6 +60,7 @@ struct ContentView: View {
                                     .foregroundStyle(.secondary)
                                 }
                             }
+                            .tag(set.id)
                             .contextMenu {
                                 Button {
                                     renameText = set.name
@@ -100,13 +103,39 @@ struct ContentView: View {
                     }
                 }
             }
+            .environment(\.editMode, $editMode)
             .navigationTitle("正誤トレーナー")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if !store.sets.isEmpty {
+                        Button(editMode == .active ? "完了" : "選択") {
+                            if editMode == .active {
+                                editMode = .inactive
+                                selectedIDs = []
+                            } else {
+                                editMode = .active
+                            }
+                        }
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showPicker = true
                     } label: {
                         Label("読み込む", systemImage: "plus")
+                    }
+                }
+                if editMode == .active {
+                    ToolbarItem(placement: .bottomBar) {
+                        HStack {
+                            Text("\(selectedIDs.count)件選択中")
+                                .font(.subheadline)
+                            Spacer()
+                            Button("全部で作る") { createCombined(wrongOnly: false) }
+                                .disabled(selectedIDs.isEmpty)
+                            Button("間違いだけで作る") { createCombined(wrongOnly: true) }
+                                .disabled(selectedIDs.isEmpty)
+                        }
                     }
                 }
             }
@@ -140,7 +169,7 @@ struct ContentView: View {
             } message: {
                 Text(importError ?? "")
             }
-            .alert("読み込みました", isPresented: Binding(
+            .alert("お知らせ", isPresented: Binding(
                 get: { importNotice != nil },
                 set: { if !$0 { importNotice = nil } }
             )) {
@@ -288,4 +317,22 @@ struct ContentView: View {
         }
         isImporting = false
     }
+
+    // MARK: - 複数選択から新規リスト
+
+    private func createCombined(wrongOnly: Bool) {
+        let ids = store.sets.map { $0.id }.filter { selectedIDs.contains($0) }
+        let name = wrongOnly ? "間違いまとめ（\(ids.count)件）" : "まとめ（\(ids.count)件）"
+        let count = store.createSetFromSets(ids: ids, wrongOnly: wrongOnly, name: name)
+        editMode = .inactive
+        selectedIDs = []
+        if count > 0 {
+            importNotice = "新しい問題集「\(name)」（\(count)問）を作りました"
+        } else {
+            importNotice = wrongOnly
+                ? "選択した問題集に、間違えた問題がまだないため、リストは作りませんでした"
+                : "選択した問題集に問題がないため、リストは作りませんでした"
+        }
+    }
+
 }

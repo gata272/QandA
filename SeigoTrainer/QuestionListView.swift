@@ -32,6 +32,11 @@ struct QuestionListView: View {
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
+                                    if let sec = q.section, !sec.isEmpty {
+                                        Text("セクション：\(sec)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                         }
@@ -49,7 +54,7 @@ struct QuestionListView: View {
         .navigationTitle("問題一覧・編集")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { q in
-            QuestionEditView(question: q) { updated in
+            QuestionEditView(question: q, sections: set?.sections ?? []) { updated in
                 save(updated)
             }
         }
@@ -74,19 +79,23 @@ struct QuestionListView: View {
 
 private struct QuestionEditView: View {
     let question: Question
+    let sections: [String]
     var onSave: (Question) -> Void
 
     @State private var front: String
     @State private var back: String
     @State private var explanation: String
+    @State private var sectionName: String
     @Environment(\.dismiss) private var dismiss
 
-    init(question: Question, onSave: @escaping (Question) -> Void) {
+    init(question: Question, sections: [String], onSave: @escaping (Question) -> Void) {
         self.question = question
+        self.sections = sections
         self.onSave = onSave
         _front = State(initialValue: question.front)
         _back = State(initialValue: question.back)
         _explanation = State(initialValue: question.explanation)
+        _sectionName = State(initialValue: question.section ?? "")
     }
 
     var body: some View {
@@ -95,6 +104,16 @@ private struct QuestionEditView: View {
                 Section("問題番号") {
                     Text("No.\(question.number)")
                         .foregroundStyle(.secondary)
+                }
+                if !sections.isEmpty {
+                    Section("セクション") {
+                        Picker("セクション", selection: $sectionName) {
+                            Text("未分類").tag("")
+                            ForEach(sections, id: \.self) { name in
+                                Text(name).tag(name)
+                            }
+                        }
+                    }
                 }
                 Section("表面（問題）") {
                     TextField("表面", text: $front, axis: .vertical)
@@ -117,7 +136,7 @@ private struct QuestionEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        onSave(Question(number: question.number, front: front, back: back, explanation: explanation))
+                        onSave(Question(number: question.number, front: front, back: back, explanation: explanation, section: sectionName.isEmpty ? nil : sectionName))
                         dismiss()
                     }
                     .disabled(front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

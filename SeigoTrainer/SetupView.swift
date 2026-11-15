@@ -8,6 +8,7 @@ struct SetupView: View {
     @State private var startNumber = 1
     @State private var endNumber = 40
     @AppStorage("seigoShuffle") private var shuffle = false
+    @State private var sectionFilter = "" // "" = すべて, "__unassigned__" = 未分類, それ以外はセクション名
     @State private var startQuiz = false
     @State private var didInitRange = false
 
@@ -15,18 +16,30 @@ struct SetupView: View {
         store.sets.first { $0.id == setID }
     }
 
+    private func matchesSection(_ q: Question) -> Bool {
+        switch sectionFilter {
+        case "":
+            return true
+        case "__unassigned__":
+            return q.section == nil || q.section == ""
+        default:
+            return q.section == sectionFilter
+        }
+    }
+
     private var selectedQuestions: [Question] {
         guard let set else { return [] }
+        let base = set.questions.filter { matchesSection($0) }
         var qs: [Question]
         switch mode {
         case 1:
-            qs = set.questions.sorted { $0.number < $1.number }
+            qs = base.sorted { $0.number < $1.number }
         case 2:
-            qs = set.questions
+            qs = base
                 .filter { set.stats[$0.number]?.lastCorrect == false }
                 .sorted { $0.number < $1.number }
         default:
-            qs = set.questions
+            qs = base
                 .filter { $0.number >= startNumber && $0.number <= endNumber }
                 .sorted { $0.number < $1.number }
         }
@@ -73,6 +86,28 @@ struct SetupView: View {
                             QuestionListView(store: store, setID: setID)
                         } label: {
                             Label("問題一覧・編集", systemImage: "list.bullet.rectangle")
+                        }
+                    }
+
+                    if !set.sections.isEmpty {
+                        Section("セクションで絞り込む") {
+                            Picker("セクション", selection: $sectionFilter) {
+                                Text("すべて").tag("")
+                                ForEach(set.sections, id: \.self) { name in
+                                    Text(name).tag(name)
+                                }
+                                if set.questions.contains(where: { $0.section == nil || $0.section == "" }) {
+                                    Text("未分類").tag("__unassigned__")
+                                }
+                            }
+                        }
+                    }
+
+                    Section {
+                        NavigationLink {
+                            SectionListView(store: store, setID: setID)
+                        } label: {
+                            Label("セクションを管理", systemImage: "folder.badge.gearshape")
                         }
                     }
 
