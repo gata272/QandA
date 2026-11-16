@@ -102,9 +102,14 @@ struct QuizView: View {
         .simultaneousGesture(
             DragGesture(minimumDistance: 30)
                 .onEnded { value in
-                    // 左から右へのスワイプで前の問題に戻る
-                    if value.translation.width > 80 && abs(value.translation.height) < 50 {
-                        goBack()
+                    if abs(value.translation.height) < 50 {
+                        if value.translation.width > 80 {
+                            // 左から右へのスワイプで前の問題に戻る
+                            goBack()
+                        } else if value.translation.width < -80 {
+                            // 右から左へのスワイプで、解説を見ずに次の問題へ進む
+                            next()
+                        }
                     }
                 }
         )
@@ -286,20 +291,14 @@ struct QuizView: View {
         next()
     }
 
-    /// 前の問題に戻る。回答済みなら結果を表示した状態で、未回答ならそのまま戻る
+    /// 前の問題に戻る。戻った問題は、回答済みでも常に問題画面（未回答の表示）で開く。
+    /// 以前の回答の記録自体は残り、解き直すと上書きされる。
     private func goBack() {
         guard index > 0 else { return }
         index -= 1
-        let q = session[index]
-        if let r = results[q.number] {
-            graded = true
-            currentCorrect = r
-            picked = nil
-        } else {
-            graded = false
-            currentCorrect = nil
-            picked = nil
-        }
+        graded = false
+        picked = nil
+        currentCorrect = nil
     }
 
     private func next() {

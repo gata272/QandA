@@ -242,8 +242,9 @@ struct SetupView: View {
                 ContentUnavailableView("問題集が見つかりません", systemImage: "questionmark.folder")
             }
         }
-        .navigationTitle("出題設定")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
     }
 }
 
