@@ -345,12 +345,66 @@ final class SetStore: ObservableObject {
         stat.lastCorrect = correct
         sets[idx].stats[questionNumber] = stat
         saveStats(setID: setID)
+        DailyStats.record(correct: correct)
     }
 
     private func saveStats(setID: String) {
         guard let set = sets.first(where: { $0.id == setID }) else { return }
         if let data = try? JSONEncoder().encode(set.stats) {
             try? data.write(to: statsFileURL(id: setID), options: .atomic)
+        }
+    }
+}
+
+/// 1日分の学習記録（解いた問題数と内訳）
+struct DayStat: Codable, Equatable {
+    var answered: Int = 0
+    var correct: Int = 0
+    var wrong: Int = 0
+}
+
+/// 日ごとの学習統計。設定（seigoStatsEnabled）がオンのときだけ記録する。
+/// 保存先は Documents/SeigoTrainerDailyStats.json（日付文字列がキー）。
+enum DailyStats {
+    static var isEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "seigoStatsEnabled")
+    }
+
+    private static func fileURL() -> URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return docs.appendingPathComponent("SeigoTrainerDailyStats.json")
+    }
+
+    static func dayKey(for date: Date) -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
+    }
+
+    static func load() -> [String: DayStat] {
+        guard let data = try? Data(contentsOf: fileURL()),
+              let decoded = try? JSONDecoder().decode([String: DayStat].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    static func record(correct: Bool) {
+        guard isEnabled else { return }
+        var all = load()
+        let key = dayKey(for: Date())
+        var d = all[key] ?? DayStat()
+        d.answered += 1
+        if correct {
+            d.correct += 1
+        } else {
+            d.wrong += 1
+        }
+        all[key] = d
+        if let data = try? JSONEncoder().encode(all) {
+            try? data.write(to: fileURL(), options: .atomic)
         }
     }
 }

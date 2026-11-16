@@ -1,11 +1,15 @@
 import SwiftUI
+import UIKit
 
 struct SetupView: View {
     @ObservedObject var store: SetStore
     let setID: String
 
     @State private var starOnly = false // スター付きのみに絞る
-    @State private var wrongOnly = false // 間違いのみ（値がマイナス）に絞る
+    @State private var valueFilterEnabled = false // 値で絞り込むかどうか
+    @State private var valueMin = -100 // 値の範囲の下限
+    @State private var valueMax = -1 // 値の範囲の上限（既定はマイナスのみ）
+    @State private var valueExpanded = false // 値で絞り込むは閉じた状態が既定
     @State private var startNumber = 1
     @State private var endNumber = 40
     @AppStorage("seigoShuffle") private var shuffle = false
@@ -39,8 +43,11 @@ struct SetupView: View {
         if starOnly {
             qs = qs.filter { $0.starred }
         }
-        if wrongOnly {
-            qs = qs.filter { (set.stats[$0.number]?.score ?? 0) < 0 }
+        if valueFilterEnabled {
+            qs = qs.filter {
+                let sc = set.stats[$0.number]?.score ?? 0
+                return sc >= valueMin && sc <= valueMax
+            }
         }
         qs.sort { $0.number < $1.number }
         if shuffle {
@@ -83,17 +90,59 @@ struct SetupView: View {
                     if screenMode == 0 {
                     Section("絞り込み") {
                         Toggle("スター付きのみ", isOn: $starOnly)
-                        Toggle("間違いのみ（値がマイナス）", isOn: $wrongOnly)
                         if starOnly && !set.questions.contains(where: { $0.starred && matchesSection($0) }) {
                             Text("スター付きの問題はまだありません")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        if wrongOnly && !set.questions.contains(where: { matchesSection($0) && (set.stats[$0.number]?.score ?? 0) < 0 }) {
-                            Text("間違えた問題（値がマイナス）はまだありません")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    }
+
+                    Section {
+                        DisclosureGroup(isExpanded: $valueExpanded) {
+                            Toggle("値で絞り込む", isOn: $valueFilterEnabled)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("最小値")
+                                    Spacer()
+                                    TextField("最小値", value: $valueMin, format: .number)
+                                        .keyboardType(.numbersAndPunctuation)
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 64)
+                                    Stepper("", value: $valueMin, in: -999...999)
+                                        .labelsHidden()
+                                }
+                            }
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("最大値")
+                                    Spacer()
+                                    TextField("最大値", value: $valueMax, format: .number)
+                                        .keyboardType(.numbersAndPunctuation)
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 64)
+                                    Stepper("", value: $valueMax, in: -999...999)
+                                        .labelsHidden()
+                                }
+                            }
+                            if valueFilterEnabled && !set.questions.contains(where: { matchesSection($0) && (set.stats[$0.number]?.score ?? 0) >= valueMin && (set.stats[$0.number]?.score ?? 0) <= valueMax }) {
+                                Text("その範囲の値の問題はまだありません")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } label: {
+                            HStack {
+                                Text("値で絞り込む")
+                                Spacer()
+                                Text(valueFilterEnabled ? "\(valueMin)〜\(valueMax)" : "オフ")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                    }
+                    .onChange(of: valueMin) { _, v in
+                        if v > valueMax { valueMax = v }
+                    }
+                    .onChange(of: valueMax) { _, v in
+                        if v < valueMin { valueMin = v }
                     }
 
                     if !set.sections.isEmpty {
@@ -245,6 +294,7 @@ struct SetupView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .background(InteractivePopGestureEnabler())
     }
 }
 
@@ -289,5 +339,34 @@ struct ScopedQuestionListView: View {
         }
         .navigationTitle("対象の問題一覧")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// 戻るボタンを隠したままでも、画面左端からのスワイプで前の画面に戻れるようにする。
+/// （SwiftUIで戻るボタンを隠すと標準のスワイプバックが効かなくなるための対策。
+/// この画面が見えている間だけ有効にし、離れるときは元の状態に戻す）
+private struct InteractivePopGestureEnabler: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> EnablerViewController {
+        EnablerViewController()
+    }
+
+    func updateUIViewController(_ uiViewController: EnablerViewController, context: Context) {}
+
+    final class EnablerViewController: UIViewController {
+        private weak var savedDelegate: UIGestureRecognizerDelegate?
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            guard let recognizer = navigationController?.interactivePopGestureRecognizer else { return }
+            savedDelegate = recognizer.delegate
+            recognizer.delegate = nil
+            recognizer.isEnabled = true
+        }
+
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            guard let recognizer = navigationController?.interactivePopGestureRecognizer else { return }
+            recognizer.delegate = savedDelegate
+        }
     }
 }

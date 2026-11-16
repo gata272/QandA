@@ -24,6 +24,7 @@ struct ContentView: View {
     }
 
     var body: some View {
+        TabView {
         NavigationStack {
             Group {
                 if store.sets.isEmpty {
@@ -181,6 +182,14 @@ struct ContentView: View {
                 Button("OK") { importNotice = nil }
             } message: {
                 Text(importNotice ?? "")
+            }
+        }
+        .tabItem {
+            Label("リスト", systemImage: "list.bullet")
+        }
+        StatsView()
+            .tabItem {
+                Label("統計", systemImage: "chart.bar")
             }
         }
     }
