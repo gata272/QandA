@@ -113,25 +113,70 @@ struct SetupView: View {
 
                     if mode == 0 {
                         Section("範囲（問題番号）") {
-                            Stepper(value: $startNumber, in: set.minNumber...set.maxNumber) {
+                            VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Text("開始")
                                     Spacer()
-                                    Text("No.\(startNumber)").foregroundStyle(.secondary)
+                                    Text("No.")
+                                        .foregroundStyle(.secondary)
+                                    TextField("開始", value: $startNumber, format: .number)
+                                        .keyboardType(.numberPad)
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 64)
+                                    Stepper("", value: $startNumber, in: set.minNumber...set.maxNumber)
+                                        .labelsHidden()
+                                }
+                                if set.minNumber < set.maxNumber {
+                                    Slider(value: Binding(
+                                        get: { Double(startNumber) },
+                                        set: { startNumber = Int($0.rounded()) }
+                                    ), in: Double(set.minNumber)...Double(set.maxNumber), step: 1)
                                 }
                             }
-                            Stepper(value: $endNumber, in: set.minNumber...set.maxNumber) {
+                            VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Text("終了")
                                     Spacer()
-                                    Text("No.\(endNumber)").foregroundStyle(.secondary)
+                                    Text("No.")
+                                        .foregroundStyle(.secondary)
+                                    TextField("終了", value: $endNumber, format: .number)
+                                        .keyboardType(.numberPad)
+                                        .multilineTextAlignment(.trailing)
+                                        .frame(width: 64)
+                                    Stepper("", value: $endNumber, in: set.minNumber...set.maxNumber)
+                                        .labelsHidden()
+                                }
+                                if set.minNumber < set.maxNumber {
+                                    Slider(value: Binding(
+                                        get: { Double(endNumber) },
+                                        set: { endNumber = Int($0.rounded()) }
+                                    ), in: Double(set.minNumber)...Double(set.maxNumber), step: 1)
                                 }
                             }
+                        }
+                        .onChange(of: startNumber) { _, v in
+                            let clamped = min(max(v, set.minNumber), set.maxNumber)
+                            if clamped != v { startNumber = clamped }
+                            if startNumber > endNumber { endNumber = startNumber }
+                        }
+                        .onChange(of: endNumber) { _, v in
+                            let clamped = min(max(v, set.minNumber), set.maxNumber)
+                            if clamped != v { endNumber = clamped }
+                            if endNumber < startNumber { startNumber = endNumber }
                         }
                     }
 
                     Section {
                         Toggle("ランダムに並べ替える", isOn: $shuffle)
+                    }
+
+                    Section {
+                        NavigationLink {
+                            ScopedQuestionListView(questions: selectedQuestions, stats: set.stats)
+                        } label: {
+                            Label("対象の問題一覧（\(selectedQuestions.count)問）", systemImage: "list.number")
+                        }
+                        .disabled(selectedQuestions.isEmpty)
                     }
 
                     Section {
@@ -163,6 +208,44 @@ struct SetupView: View {
             }
         }
         .navigationTitle("出題設定")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// 現在の出題条件（モード・セクション・範囲）に合う問題の一覧（確認用）
+struct ScopedQuestionListView: View {
+    let questions: [Question]
+    let stats: [Int: QuestionStat]
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(questions) { q in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 8) {
+                            Text("No.\(q.number)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if stats[q.number]?.lastCorrect == false {
+                                Text("前回ミス")
+                                    .font(.caption2)
+                                    .foregroundStyle(.red)
+                            }
+                            if let sec = q.section, !sec.isEmpty {
+                                Text(sec)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Text(q.front)
+                            .lineLimit(2)
+                    }
+                }
+            } header: {
+                Text("全\(questions.count)問")
+            }
+        }
+        .navigationTitle("対象の問題一覧")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

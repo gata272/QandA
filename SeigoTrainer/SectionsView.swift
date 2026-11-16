@@ -7,6 +7,11 @@ struct SectionListView: View {
     let setID: String
 
     @State private var newName = ""
+    @State private var newStartText = ""
+    @State private var newEndText = ""
+    @State private var assignSectionName = ""
+    @State private var assignStartText = ""
+    @State private var assignEndText = ""
     @State private var renaming: String? = nil
     @State private var renameText = ""
 
@@ -19,14 +24,68 @@ struct SectionListView: View {
             if let set {
                 List {
                     Section("新しいセクション") {
+                        TextField("セクション名（例: 第1章）", text: $newName)
                         HStack {
-                            TextField("セクション名（例: 第1章）", text: $newName)
-                            Button("追加") {
-                                store.addSection(setID: setID, name: newName)
-                                newName = ""
+                            Text("番号で割り当て（任意）")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            TextField("開始", text: $newStartText)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 52)
+                            Text("〜")
+                            TextField("終了", text: $newEndText)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 52)
+                        }
+                        Button("追加") {
+                            let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            store.addSection(setID: setID, name: name)
+                            if let f = Int(newStartText), let t = Int(newEndText) {
+                                store.assignSectionRange(setID: setID, section: name, from: f, to: t)
                             }
-                            .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                      || set.sections.contains(newName.trimmingCharacters(in: .whitespacesAndNewlines)))
+                            newName = ""
+                            newStartText = ""
+                            newEndText = ""
+                        }
+                        .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                  || set.sections.contains(newName.trimmingCharacters(in: .whitespacesAndNewlines)))
+                    }
+
+                    Section("番号で割り当てる") {
+                        if set.sections.isEmpty {
+                            Text("先にセクションを作ってください")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Picker("セクション", selection: $assignSectionName) {
+                                ForEach(set.sections, id: \.self) { name in
+                                    Text(name).tag(name)
+                                }
+                            }
+                            HStack {
+                                Text("範囲")
+                                Spacer()
+                                TextField("開始", text: $assignStartText)
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 52)
+                                Text("〜")
+                                TextField("終了", text: $assignEndText)
+                                    .keyboardType(.numberPad)
+                                    .multilineTextAlignment(.trailing)
+                                    .frame(width: 52)
+                            }
+                            Button("この範囲を割り当てる") {
+                                if let f = Int(assignStartText), let t = Int(assignEndText), !assignSectionName.isEmpty {
+                                    store.assignSectionRange(setID: setID, section: assignSectionName, from: f, to: t)
+                                }
+                            }
+                            .disabled(Int(assignStartText) == nil || Int(assignEndText) == nil || assignSectionName.isEmpty)
+                            Text("この問題集は No.\(set.minNumber)〜\(set.maxNumber) です")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
@@ -77,6 +136,11 @@ struct SectionListView: View {
         }
         .navigationTitle("セクションを管理")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if assignSectionName.isEmpty {
+                assignSectionName = set?.sections.first ?? ""
+            }
+        }
         .alert("名前を変更", isPresented: Binding(
             get: { renaming != nil },
             set: { if !$0 { renaming = nil } }

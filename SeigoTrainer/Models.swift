@@ -218,6 +218,18 @@ final class SetStore: ObservableObject {
         persist(sets[idx])
     }
 
+    /// 番号の範囲でまとめてセクションへ割り当てる。
+    func assignSectionRange(setID: String, section: String, from: Int, to: Int) {
+        guard let idx = sets.firstIndex(where: { $0.id == setID }) else { return }
+        guard sets[idx].sections.contains(section) else { return }
+        let lo = min(from, to)
+        let hi = max(from, to)
+        for qi in sets[idx].questions.indices where (lo...hi).contains(sets[idx].questions[qi].number) {
+            sets[idx].questions[qi].section = section
+        }
+        persist(sets[idx])
+    }
+
     /// セクションを消す。そこに入っていた問題は「未分類」に戻る（問題自体は消えない）。
     func deleteSection(setID: String, name: String) {
         guard let idx = sets.firstIndex(where: { $0.id == setID }) else { return }
