@@ -17,42 +17,11 @@ struct QuestionListView: View {
             if let set {
                 List {
                     Section {
-                        ForEach(set.questions.sorted { $0.number < $1.number }) { q in
-                            Button {
+                        ForEach(sortedQuestions(set)) { q in
+                            QuestionRowView(question: q) {
                                 editing = q
-                            } label: {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    HStack(spacing: 4) {
-                                        Text("No.\(q.number)")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        if q.starred {
-                                            Image(systemName: "star.fill")
-                                                .font(.caption2)
-                                                .foregroundStyle(.yellow)
-                                        }
-                                    }
-                                    Text(q.front)
-                                        .lineLimit(2)
-                                        .foregroundStyle(.primary)
-                                    Text("答え：\(q.back)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                    if let sec = q.section, !sec.isEmpty {
-                                        Text("セクション：\(sec)")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
-                            .swipeActions(edge: .leading) {
-                                Button {
-                                    store.toggleStar(setID: setID, number: q.number)
-                                } label: {
-                                    Label(q.starred ? "スターを外す" : "スター", systemImage: "star")
-                                }
-                                .tint(.yellow)
+                            } onToggleStar: {
+                                store.toggleStar(setID: setID, number: q.number)
                             }
                         }
                         .onDelete { offsets in
@@ -73,6 +42,10 @@ struct QuestionListView: View {
                 save(updated)
             }
         }
+    }
+
+    private func sortedQuestions(_ set: LoadedSet) -> [Question] {
+        set.questions.sorted { $0.number < $1.number }
     }
 
     private func delete(at offsets: IndexSet, in set: LoadedSet) {
@@ -162,6 +135,48 @@ private struct QuestionEditView: View {
                     .disabled(front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+        }
+    }
+}
+
+/// 問題一覧の1行分。コンパイラの型チェックを軽くするため、行は独立したビューに分けている。
+private struct QuestionRowView: View {
+    let question: Question
+    var onTap: () -> Void
+    var onToggleStar: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text("No.\(question.number)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if question.starred {
+                        Image(systemName: "star.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.yellow)
+                    }
+                }
+                Text(question.front)
+                    .lineLimit(2)
+                    .foregroundStyle(.primary)
+                Text("答え：\(question.back)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if let sec = question.section, !sec.isEmpty {
+                    Text("セクション：\(sec)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .swipeActions(edge: .leading) {
+            Button(action: onToggleStar) {
+                Label(question.starred ? "スターを外す" : "スター", systemImage: "star")
+            }
+            .tint(.yellow)
         }
     }
 }
