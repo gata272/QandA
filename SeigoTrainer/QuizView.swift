@@ -38,11 +38,6 @@ struct QuizView: View {
         .navigationTitle("出題中")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("やめる") { dismiss() }
-            }
-        }
     }
 
     // MARK: - 出題画面
@@ -53,17 +48,6 @@ struct QuizView: View {
             HStack {
                 Text("No.\(q.number)")
                     .font(.headline)
-                Button {
-                    toggleStar(q)
-                } label: {
-                    Image(systemName: starredNumbers.contains(q.number) ? "star.fill" : "star")
-                        .font(.title2)
-                        .foregroundStyle(starredNumbers.contains(q.number) ? Color.yellow : .secondary)
-                        .symbolEffect(.bounce, value: starredNumbers.contains(q.number))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
                 Spacer()
                 Text("\(index + 1) / \(session.count)")
                     .foregroundStyle(.secondary)
@@ -112,6 +96,22 @@ struct QuizView: View {
     @ViewBuilder
     private func bottomBar(_ q: Question, mode: AnswerMode) -> some View {
         VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Spacer()
+                Button {
+                    toggleStar(q)
+                } label: {
+                    Image(systemName: starredNumbers.contains(q.number) ? "star.fill" : "star")
+                        .font(.title2)
+                        .foregroundStyle(starredNumbers.contains(q.number) ? Color.yellow : .secondary)
+                        .symbolEffect(.bounce, value: starredNumbers.contains(q.number))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                Button("やめる") { dismiss() }
+                    .buttonStyle(.bordered)
+            }
             switch mode {
             case .choice(let options, let correct):
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 76))], spacing: 10) {
