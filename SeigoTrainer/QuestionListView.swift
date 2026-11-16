@@ -18,7 +18,7 @@ struct QuestionListView: View {
                 List {
                     Section {
                         ForEach(sortedQuestions(set)) { q in
-                            QuestionRowView(question: q, mastery: set.stats[q.number]?.mastery ?? 0) {
+                            QuestionRowView(question: q, score: set.stats[q.number]?.score ?? 0) {
                                 editing = q
                             } onToggleStar: {
                                 store.toggleStar(setID: setID, questionNumber: q.number)
@@ -38,9 +38,8 @@ struct QuestionListView: View {
         .navigationTitle("問題一覧・編集")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $editing) { q in
-            QuestionEditView(question: q, sections: set?.sections ?? [], mastery: set?.stats[q.number]?.mastery ?? 0) { updated, newMastery in
+            QuestionEditView(question: q, sections: set?.sections ?? [], score: set?.stats[q.number]?.score ?? 0) { updated in
                 save(updated)
-                store.setMastery(setID: setID, questionNumber: updated.number, mastery: newMastery)
             }
         }
     }
@@ -69,26 +68,26 @@ struct QuestionListView: View {
 private struct QuestionEditView: View {
     let question: Question
     let sections: [String]
-    var onSave: (Question, Int) -> Void
+    let score: Int
+    var onSave: (Question) -> Void
 
     @State private var front: String
     @State private var back: String
     @State private var explanation: String
     @State private var sectionName: String
     @State private var starred: Bool
-    @State private var mastery: Int
     @Environment(\.dismiss) private var dismiss
 
-    init(question: Question, sections: [String], mastery: Int, onSave: @escaping (Question, Int) -> Void) {
+    init(question: Question, sections: [String], score: Int, onSave: @escaping (Question) -> Void) {
         self.question = question
         self.sections = sections
+        self.score = score
         self.onSave = onSave
         _front = State(initialValue: question.front)
         _back = State(initialValue: question.back)
         _explanation = State(initialValue: question.explanation)
         _sectionName = State(initialValue: question.section ?? "")
         _starred = State(initialValue: question.starred)
-        _mastery = State(initialValue: mastery)
     }
 
     var body: some View {
@@ -102,13 +101,19 @@ private struct QuestionEditView: View {
                     Toggle("スターを付ける", isOn: $starred)
                 }
                 Section("状態") {
-                    HStack(spacing: 10) {
-                        masteryButton(title: "覚えた", value: 1, color: .green)
-                        masteryButton(title: "覚えてない", value: 2, color: .orange)
+                    HStack {
+                        Text("値（正解で+1、不正解で-1）")
+                            .font(.callout)
+                        Spacer()
+                        Text(score > 0 ? "+\(score)" : "\(score)")
+                            .font(.headline)
+                            .foregroundStyle(score > 0 ? Color.green : (score < 0 ? Color.red : Color.secondary))
                     }
-                    Text("現在：\(masteryName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if score < 0 {
+                        Text("値がマイナスのため「間違えた問題」として扱われます")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 if !sections.isEmpty {
                     Section("セクション") {
@@ -141,7 +146,7 @@ private struct QuestionEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        onSave(Question(number: question.number, front: front, back: back, explanation: explanation, section: sectionName.isEmpty ? nil : sectionName, starred: starred), mastery)
+                        onSave(Question(number: question.number, front: front, back: back, explanation: explanation, section: sectionName.isEmpty ? nil : sectionName, starred: starred))
                         dismiss()
                     }
                     .disabled(front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -150,38 +155,12 @@ private struct QuestionEditView: View {
         }
     }
 
-    private var masteryName: String {
-        switch mastery {
-        case 1: return "覚えた"
-        case 2: return "覚えてない"
-        default: return "なし"
-        }
-    }
-
-    /// 状態ボタン。「なし」のときだけその状態になり、同じ状態や反対の状態のときは「なし」に戻る。
-    private func masteryButton(title: String, value: Int, color: Color) -> some View {
-        let selected = mastery == value
-        return Button {
-            mastery = (mastery == 0) ? value : 0
-        } label: {
-            HStack(spacing: 4) {
-                if selected {
-                    Image(systemName: "checkmark.circle.fill")
-                }
-                Text(title)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 6)
-        }
-        .buttonStyle(.bordered)
-        .tint(color)
-    }
 }
 
 /// 問題一覧の1行分。コンパイラの型チェックを軽くするため、行は独立したビューに分けている。
 private struct QuestionRowView: View {
     let question: Question
-    let mastery: Int
+    let score: Int
     var onTap: () -> Void
     var onToggleStar: () -> Void
 
@@ -197,17 +176,10 @@ private struct QuestionRowView: View {
                             .font(.caption2)
                             .foregroundStyle(.yellow)
                     }
-                    if mastery == 1 {
-                        Text("覚えた")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.green)
-                    } else if mastery == 2 {
-                        Text("覚えてない")
-                            .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.orange)
-                    }
+                    Text(score > 0 ? "+\(score)" : "\(score)")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(score > 0 ? Color.green : (score < 0 ? Color.red : Color.secondary))
                 }
                 Text(question.front)
                     .lineLimit(2)

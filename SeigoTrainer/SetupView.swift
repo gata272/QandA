@@ -4,7 +4,8 @@ struct SetupView: View {
     @ObservedObject var store: SetStore
     let setID: String
 
-    @State private var mode = 0 // 0: 範囲指定, 1: スター付き, 2: 間違えた問題だけ
+    @State private var starOnly = false // スター付きのみに絞る
+    @State private var wrongOnly = false // 間違いのみ（値がマイナス）に絞る
     @State private var startNumber = 1
     @State private var endNumber = 40
     @AppStorage("seigoShuffle") private var shuffle = false
@@ -32,20 +33,16 @@ struct SetupView: View {
 
     private var selectedQuestions: [Question] {
         guard let set else { return [] }
-        let base = set.questions.filter { matchesSection($0) }
-        var qs: [Question]
-        switch mode {
-        case 1:
-            qs = base.filter { $0.starred }.sorted { $0.number < $1.number }
-        case 2:
-            qs = base
-                .filter { set.stats[$0.number]?.lastCorrect == false }
-                .sorted { $0.number < $1.number }
-        default:
-            qs = base
-                .filter { $0.number >= startNumber && $0.number <= endNumber }
-                .sorted { $0.number < $1.number }
+        // 絞り込みは全部を重ねて適用する（セクション・範囲・スター・間違い）
+        var qs = set.questions.filter { matchesSection($0) }
+        qs = qs.filter { $0.number >= startNumber && $0.number <= endNumber }
+        if starOnly {
+            qs = qs.filter { $0.starred }
         }
+        if wrongOnly {
+            qs = qs.filter { (set.stats[$0.number]?.score ?? 0) < 0 }
+        }
+        qs.sort { $0.number < $1.number }
         if shuffle {
             qs.shuffle()
         }
@@ -84,20 +81,16 @@ struct SetupView: View {
                     }
 
                     if screenMode == 0 {
-                    Section("出題モード") {
-                        Picker("出題モード", selection: $mode) {
-                            Text("範囲指定").tag(0)
-                            Text("スター付き").tag(1)
-                            Text("間違いのみ").tag(2)
-                        }
-                        .pickerStyle(.segmented)
-                        if mode == 2 && set.wrongRemaining == 0 {
-                            Text("間違えた問題はまだありません")
+                    Section("絞り込み") {
+                        Toggle("スター付きのみ", isOn: $starOnly)
+                        Toggle("間違いのみ（値がマイナス）", isOn: $wrongOnly)
+                        if starOnly && !set.questions.contains(where: { $0.starred && matchesSection($0) }) {
+                            Text("スター付きの問題はまだありません")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        if mode == 1 && !set.questions.contains(where: { $0.starred && matchesSection($0) }) {
-                            Text("スター付きの問題はまだありません")
+                        if wrongOnly && !set.questions.contains(where: { matchesSection($0) && (set.stats[$0.number]?.score ?? 0) < 0 }) {
+                            Text("間違えた問題（値がマイナス）はまだありません")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -127,9 +120,8 @@ struct SetupView: View {
                         }
                     }
 
-                    if mode == 0 {
-                        Section {
-                            DisclosureGroup(isExpanded: $rangeExpanded) {
+                    Section {
+                        DisclosureGroup(isExpanded: $rangeExpanded) {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Text("開始")
@@ -189,7 +181,6 @@ struct SetupView: View {
                             if clamped != v { endNumber = clamped }
                             if endNumber < startNumber { startNumber = endNumber }
                         }
-                    }
 
                     Section {
                         Toggle("ランダムに並べ替える", isOn: $shuffle)
@@ -269,10 +260,11 @@ struct ScopedQuestionListView: View {
                             Text("No.\(q.number)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            if stats[q.number]?.lastCorrect == false {
-                                Text("前回ミス")
+                            if let sc = stats[q.number]?.score {
+                                Text(sc > 0 ? "+\(sc)" : "\(sc)")
                                     .font(.caption2)
-                                    .foregroundStyle(.red)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(sc > 0 ? Color.green : (sc < 0 ? Color.red : Color.secondary))
                             }
                             if q.starred {
                                 Image(systemName: "star.fill")

@@ -52,6 +52,10 @@ struct QuizView: View {
             HStack {
                 Text("No.\(q.number)")
                     .font(.headline)
+                Text(scoreText(currentScore(for: q)))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(scoreColor(currentScore(for: q)))
                 Spacer()
                 Text("\(index + 1) / \(session.count)")
                     .foregroundStyle(.secondary)
@@ -230,6 +234,21 @@ struct QuizView: View {
     }
 
     // MARK: - 判定と進行
+
+    /// その問題の現在の値（成績データから読む。回答すると即座に増減する）
+    private func currentScore(for q: Question) -> Int {
+        store.sets.first { $0.id == setID }?.stats[q.number]?.score ?? 0
+    }
+
+    private func scoreText(_ v: Int) -> String {
+        v > 0 ? "+\(v)" : "\(v)"
+    }
+
+    private func scoreColor(_ v: Int) -> Color {
+        if v > 0 { return .green }
+        if v < 0 { return .red }
+        return .secondary
+    }
 
     private func toggleStar(_ q: Question) {
         let now = !starredNumbers.contains(q.number)
