@@ -181,7 +181,7 @@ final class SetStore: ObservableObject {
 
     func duplicateSet(id: String) {
         guard let set = sets.first(where: { $0.id == id }) else { return }
-        try? addSet(name: set.name + "のコピー", questions: set.questions, stats: set.stats, sections: set.sections)
+        _ = try? addSet(name: set.name + "のコピー", questions: set.questions, stats: set.stats, sections: set.sections)
     }
 
     /// 2つの問題集を合わせた新しい問題集を作る。元の2つはそのまま残す。
@@ -196,7 +196,7 @@ final class SetStore: ObservableObject {
             Question(number: idx + 1, front: q.front, back: q.back, explanation: q.explanation, section: q.section, starred: q.starred)
         }
         for q in combined { if let s = q.section, !sections.contains(s) { sections.append(s) } }
-        try? addSet(name: "\(a.name) + \(b.name)", questions: combined, sections: sections)
+        _ = try? addSet(name: "\(a.name) + \(b.name)", questions: combined, sections: sections)
     }
 
     /// 複数の問題集から新しい問題集を作る。filter で「全部／間違いのみ／スター付きのみ」を選べる。
