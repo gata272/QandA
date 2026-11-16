@@ -25,6 +25,10 @@ struct QuizView: View {
         session.indices.contains(index) ? session[index] : nil
     }
 
+    private var setName: String {
+        store.sets.first { $0.id == setID }?.name ?? "出題中"
+    }
+
     var body: some View {
         Group {
             if finished {
@@ -35,7 +39,7 @@ struct QuizView: View {
                 ContentUnavailableView("問題がありません", systemImage: "questionmark.circle")
             }
         }
-        .navigationTitle("出題中")
+        .navigationTitle(setName)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
     }
@@ -91,6 +95,15 @@ struct QuizView: View {
 
             bottomBar(q, mode: mode)
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 30)
+                .onEnded { value in
+                    // 左から右へのスワイプで前の問題に戻る
+                    if value.translation.width > 80 && abs(value.translation.height) < 50 {
+                        goBack()
+                    }
+                }
+        )
     }
 
     @ViewBuilder
@@ -140,24 +153,20 @@ struct QuizView: View {
                 }
             case .reveal:
                 if !graded {
-                    HStack(spacing: 10) {
-                        Button {
-                            graded = true
-                        } label: {
-                            Text("答えと解説を見る")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        Button("スキップ") { skip() }
-                            .buttonStyle(.bordered)
+                    Button {
+                        graded = true
+                    } label: {
+                        Text("答えと解説を見る")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
                     }
+                    .buttonStyle(.borderedProminent)
                 } else {
                     HStack(spacing: 10) {
                         Button {
                             selfGrade(false, question: q)
                         } label: {
-                            Text("分からなかった")
+                            Text("不正解")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
                         }
@@ -167,12 +176,21 @@ struct QuizView: View {
                         Button {
                             selfGrade(true, question: q)
                         } label: {
-                            Text("分かった")
+                            Text("正解")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.green)
+
+                        Button {
+                            skip()
+                        } label: {
+                            Text("スキップ")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
             }
@@ -242,6 +260,22 @@ struct QuizView: View {
     /// 結果を記録せずに次へ進む（最後の問題なら結果画面へ）
     private func skip() {
         next()
+    }
+
+    /// 前の問題に戻る。回答済みなら結果を表示した状態で、未回答ならそのまま戻る
+    private func goBack() {
+        guard index > 0 else { return }
+        index -= 1
+        let q = session[index]
+        if let r = results[q.number] {
+            graded = true
+            currentCorrect = r
+            picked = nil
+        } else {
+            graded = false
+            currentCorrect = nil
+            picked = nil
+        }
     }
 
     private func next() {

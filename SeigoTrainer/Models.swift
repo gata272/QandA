@@ -38,6 +38,28 @@ struct QuestionStat: Codable, Equatable {
     var correctCount: Int = 0
     var wrongCount: Int = 0
     var lastCorrect: Bool? = nil
+    /// 習得状態: 0=なし, 1=覚えた, 2=覚えてない
+    var mastery: Int = 0
+
+    enum CodingKeys: String, CodingKey {
+        case correctCount, wrongCount, lastCorrect, mastery
+    }
+
+    init(correctCount: Int = 0, wrongCount: Int = 0, lastCorrect: Bool? = nil, mastery: Int = 0) {
+        self.correctCount = correctCount
+        self.wrongCount = wrongCount
+        self.lastCorrect = lastCorrect
+        self.mastery = mastery
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        correctCount = try c.decodeIfPresent(Int.self, forKey: .correctCount) ?? 0
+        wrongCount = try c.decodeIfPresent(Int.self, forKey: .wrongCount) ?? 0
+        lastCorrect = try c.decodeIfPresent(Bool.self, forKey: .lastCorrect)
+        // v1.8以前の成績ファイルには無いので、無ければ「なし」
+        mastery = try c.decodeIfPresent(Int.self, forKey: .mastery) ?? 0
+    }
 }
 
 struct QuestionSetFile: Codable {
@@ -80,6 +102,9 @@ struct LoadedSet: Identifiable {
 
     var wrongRemaining: Int {
         stats.values.filter { $0.lastCorrect == false }.count
+    }
+    var starredCount: Int {
+        questions.filter { $0.starred }.count
     }
     var minNumber: Int { questions.map { $0.number }.min() ?? 1 }
     var maxNumber: Int { questions.map { $0.number }.max() ?? 1 }
@@ -305,6 +330,15 @@ final class SetStore: ObservableObject {
         guard let set = sets.first(where: { $0.id == setID }),
               let q = set.questions.first(where: { $0.number == questionNumber }) else { return }
         setStar(setID: setID, questionNumber: questionNumber, starred: !q.starred)
+    }
+
+    func setMastery(setID: String, questionNumber: Int, mastery: Int) {
+        guard let idx = sets.firstIndex(where: { $0.id == setID }) else { return }
+        var stat = sets[idx].stats[questionNumber] ?? QuestionStat()
+        guard stat.mastery != mastery else { return }
+        stat.mastery = mastery
+        sets[idx].stats[questionNumber] = stat
+        saveStats(setID: setID)
     }
 
     func recordResult(setID: String, questionNumber: Int, correct: Bool) {

@@ -55,6 +55,10 @@ struct ContentView: View {
                                             Text("間違い残り \(set.wrongRemaining)問")
                                                 .foregroundStyle(.red)
                                         }
+                                        if set.starredCount > 0 {
+                                            Text("スター \(set.starredCount)問")
+                                                .foregroundStyle(.orange)
+                                        }
                                     }
                                     .font(.caption)
                                     .foregroundStyle(.secondary)

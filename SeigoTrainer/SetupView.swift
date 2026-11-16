@@ -75,6 +75,11 @@ struct SetupView: View {
                                     .font(.caption)
                                     .foregroundStyle(.red)
                             }
+                            if set.starredCount > 0 {
+                                Text("スター \(set.starredCount)問")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
                         }
                     }
 
