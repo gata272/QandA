@@ -9,7 +9,7 @@ struct SetupView: View {
     @State private var endNumber = 40
     @AppStorage("seigoShuffle") private var shuffle = false
     @State private var sectionFilter = "" // "" = すべて, "__unassigned__" = 未分類, それ以外はセクション名
-    @State private var sectionExpanded = true // セクション絞り込みは開いた状態が既定
+    @State private var sectionExpanded = false // セクション絞り込みは閉じた状態が既定
     @State private var rangeExpanded = false // 数字の範囲指定は閉じた状態が既定
     @State private var startQuiz = false
     @State private var didInitRange = false
@@ -229,6 +229,7 @@ struct SetupView: View {
                         }
                     }
                 }
+                .listSectionSpacing(.compact)
                 .onAppear {
                     if !didInitRange {
                         didInitRange = true

@@ -57,8 +57,11 @@ struct QuizView: View {
                     toggleStar(q)
                 } label: {
                     Image(systemName: starredNumbers.contains(q.number) ? "star.fill" : "star")
+                        .font(.title2)
                         .foregroundStyle(starredNumbers.contains(q.number) ? Color.yellow : .secondary)
                         .symbolEffect(.bounce, value: starredNumbers.contains(q.number))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 Spacer()
