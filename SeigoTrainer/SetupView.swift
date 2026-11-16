@@ -109,6 +109,7 @@ struct SetupView: View {
                                     }
                                 }
                                 .pickerStyle(.inline)
+                                .labelsHidden()
                             } label: {
                                 HStack {
                                     Text("セクションで絞り込む")

@@ -147,7 +147,7 @@ struct QuizView: View {
                     .buttonStyle(.borderedProminent)
                 } else {
                     Button {
-                        skip()
+                        skipAndReveal()
                     } label: {
                         Text("スキップ")
                             .frame(maxWidth: .infinity)
@@ -178,6 +178,15 @@ struct QuizView: View {
                         .tint(.red)
 
                         Button {
+                            skip()
+                        } label: {
+                            Text("スキップ")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button {
                             selfGrade(true, question: q)
                         } label: {
                             Text("正解")
@@ -186,15 +195,6 @@ struct QuizView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.green)
-
-                        Button {
-                            skip()
-                        } label: {
-                            Text("スキップ")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 6)
-                        }
-                        .buttonStyle(.bordered)
                     }
                 }
             }
@@ -274,6 +274,11 @@ struct QuizView: View {
         results[question.number] = ok
         store.recordResult(setID: setID, questionNumber: question.number, correct: ok)
         next()
+    }
+
+    /// 選択式でスキップしたとき: 結果は記録せず、解答と解説だけを表示する
+    private func skipAndReveal() {
+        graded = true
     }
 
     /// 結果を記録せずに次へ進む（最後の問題なら結果画面へ）
