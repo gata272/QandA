@@ -21,7 +21,7 @@ struct QuestionListView: View {
                             QuestionRowView(question: q) {
                                 editing = q
                             } onToggleStar: {
-                                store.toggleStar(setID: setID, number: q.number)
+                                store.toggleStar(setID: setID, questionNumber: q.number)
                             }
                         }
                         .onDelete { offsets in
