@@ -6,7 +6,32 @@ struct Question: Codable, Identifiable, Equatable {
     var back: String
     var explanation: String
     var section: String? = nil
+    var starred: Bool = false
     var id: Int { number }
+
+    enum CodingKeys: String, CodingKey {
+        case number, front, back, explanation, section, starred
+    }
+
+    init(number: Int, front: String, back: String, explanation: String, section: String? = nil, starred: Bool = false) {
+        self.number = number
+        self.front = front
+        self.back = back
+        self.explanation = explanation
+        self.section = section
+        self.starred = starred
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        number = try c.decode(Int.self, forKey: .number)
+        front = try c.decode(String.self, forKey: .front)
+        back = try c.decode(String.self, forKey: .back)
+        explanation = try c.decode(String.self, forKey: .explanation)
+        // v1.1以前のデータには無いキーがあるので、無ければ既定値にする
+        section = try c.decodeIfPresent(String.self, forKey: .section)
+        starred = try c.decodeIfPresent(Bool.self, forKey: .starred) ?? false
+    }
 }
 
 struct QuestionStat: Codable, Equatable {
@@ -63,6 +88,13 @@ struct LoadedSet: Identifiable {
 /// 問題集（CSVから読み込んだ問題の集まり）をアプリ内にファイルとして保持する。
 /// 保存先は Documents/SeigoTrainerSets。ファイル名だけを手がかりに、起動のたびに
 /// 現在の Documents から読み直す（LiveContainer で保存パスが変わっても壊れないように）。
+/// 複数リストから新しいリストを作るときの絞り込み
+enum SetCombineFilter {
+    case all
+    case wrong
+    case starred
+}
+
 final class SetStore: ObservableObject {
     @Published var sets: [LoadedSet] = []
 
@@ -161,31 +193,37 @@ final class SetStore: ObservableObject {
         var sections = a.sections
         for s in b.sections where !sections.contains(s) { sections.append(s) }
         let combined = (a.questions + b.questions).enumerated().map { idx, q in
-            Question(number: idx + 1, front: q.front, back: q.back, explanation: q.explanation, section: q.section)
+            Question(number: idx + 1, front: q.front, back: q.back, explanation: q.explanation, section: q.section, starred: q.starred)
         }
         for q in combined { if let s = q.section, !sections.contains(s) { sections.append(s) } }
         try? addSet(name: "\(a.name) + \(b.name)", questions: combined, sections: sections)
     }
 
-    /// 複数の問題集から新しい問題集を作る。wrongOnly のときは、各問題集で
-    /// 「最後に間違えた」問題だけを集める。作った問題数を返す（0なら作っていない）。
+    /// 複数の問題集から新しい問題集を作る。filter で「全部／間違いのみ／スター付きのみ」を選べる。
+    /// 作った問題数を返す（0なら作っていない）。
     @discardableResult
-    func createSetFromSets(ids: [String], wrongOnly: Bool, name: String) -> Int {
+    func createSetFromSets(ids: [String], filter: SetCombineFilter, name: String) -> Int {
         let chosen = ids.compactMap { id in sets.first { $0.id == id } }
         guard !chosen.isEmpty else { return 0 }
         var sections: [String] = []
         var raw: [Question] = []
         for set in chosen {
             for s in set.sections where !sections.contains(s) { sections.append(s) }
-            let qs = wrongOnly
-                ? set.questions.filter { set.stats[$0.number]?.lastCorrect == false }
-                : set.questions
+            let qs: [Question]
+            switch filter {
+            case .all:
+                qs = set.questions
+            case .wrong:
+                qs = set.questions.filter { set.stats[$0.number]?.lastCorrect == false }
+            case .starred:
+                qs = set.questions.filter { $0.starred }
+            }
             raw += qs
         }
         guard !raw.isEmpty else { return 0 }
         for q in raw { if let s = q.section, !sections.contains(s) { sections.append(s) } }
         let combined = raw.enumerated().map { idx, q in
-            Question(number: idx + 1, front: q.front, back: q.back, explanation: q.explanation, section: q.section)
+            Question(number: idx + 1, front: q.front, back: q.back, explanation: q.explanation, section: q.section, starred: q.starred)
         }
         do {
             try addSet(name: name, questions: combined, sections: sections)
@@ -253,6 +291,20 @@ final class SetStore: ObservableObject {
         try? FileManager.default.removeItem(at: setFileURL(id: id))
         try? FileManager.default.removeItem(at: statsFileURL(id: id))
         sets.removeAll { $0.id == id }
+    }
+
+    func setStar(setID: String, questionNumber: Int, starred: Bool) {
+        guard let idx = sets.firstIndex(where: { $0.id == setID }) else { return }
+        guard let qi = sets[idx].questions.firstIndex(where: { $0.number == questionNumber }) else { return }
+        guard sets[idx].questions[qi].starred != starred else { return }
+        sets[idx].questions[qi].starred = starred
+        persist(sets[idx])
+    }
+
+    func toggleStar(setID: String, questionNumber: Int) {
+        guard let set = sets.first(where: { $0.id == setID }),
+              let q = set.questions.first(where: { $0.number == questionNumber }) else { return }
+        setStar(setID: setID, questionNumber: questionNumber, starred: !q.starred)
     }
 
     func recordResult(setID: String, questionNumber: Int, correct: Bool) {

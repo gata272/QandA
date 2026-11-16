@@ -130,9 +130,11 @@ struct ContentView: View {
                             Text("\(selectedIDs.count)件選択中")
                                 .font(.subheadline)
                             Spacer()
-                            Button("全部で作る") { createCombined(wrongOnly: false) }
+                            Button("全部で作る") { createCombined(filter: .all) }
                                 .disabled(selectedIDs.isEmpty)
-                            Button("間違いだけで作る") { createCombined(wrongOnly: true) }
+                            Button("間違いだけ") { createCombined(filter: .wrong) }
+                                .disabled(selectedIDs.isEmpty)
+                            Button("スターだけ") { createCombined(filter: .starred) }
                                 .disabled(selectedIDs.isEmpty)
                         }
                     }
@@ -319,19 +321,27 @@ struct ContentView: View {
 
     // MARK: - 複数選択から新規リスト
 
-    private func createCombined(wrongOnly: Bool) {
+    private func createCombined(filter: SetCombineFilter) {
         let ids = store.sets.map { $0.id }.filter { selectedIDs.contains($0) }
-        let name = wrongOnly ? "間違いまとめ（\(ids.count)件）" : "まとめ（\(ids.count)件）"
-        let count = store.createSetFromSets(ids: ids, wrongOnly: wrongOnly, name: name)
+        let name: String
+        let emptyMessage: String
+        switch filter {
+        case .all:
+            name = "まとめ（\(ids.count)件）"
+            emptyMessage = "選択した問題集に問題がないため、リストは作りませんでした"
+        case .wrong:
+            name = "間違いまとめ（\(ids.count)件）"
+            emptyMessage = "選択した問題集に、間違えた問題がまだないため、リストは作りませんでした"
+        case .starred:
+            name = "スターまとめ（\(ids.count)件）"
+            emptyMessage = "選択した問題集に、スター付きの問題がまだないため、リストは作りませんでした"
+        }
+        let count = store.createSetFromSets(ids: ids, filter: filter, name: name)
         editMode = .inactive
         selectedIDs = []
-        if count > 0 {
-            importNotice = "新しい問題集「\(name)」（\(count)問）を作りました"
-        } else {
-            importNotice = wrongOnly
-                ? "選択した問題集に、間違えた問題がまだないため、リストは作りませんでした"
-                : "選択した問題集に問題がないため、リストは作りませんでした"
-        }
+        importNotice = count > 0
+            ? "新しい問題集「\(name)」（\(count)問）を作りました"
+            : emptyMessage
     }
 
 }

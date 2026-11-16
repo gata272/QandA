@@ -11,12 +11,14 @@ struct QuizView: View {
     @State private var currentCorrect: Bool? = nil
     @State private var results: [Int: Bool] = [:]
     @State private var finished = false
+    @State private var starredNumbers: Set<Int>
     @Environment(\.dismiss) private var dismiss
 
     init(store: SetStore, setID: String, questions: [Question]) {
         _store = ObservedObject(wrappedValue: store)
         self.setID = setID
         _session = State(initialValue: questions)
+        _starredNumbers = State(initialValue: Set(questions.filter { $0.starred }.map { $0.number }))
     }
 
     private var current: Question? {
@@ -51,6 +53,14 @@ struct QuizView: View {
             HStack {
                 Text("No.\(q.number)")
                     .font(.headline)
+                Button {
+                    toggleStar(q)
+                } label: {
+                    Image(systemName: starredNumbers.contains(q.number) ? "star.fill" : "star")
+                        .foregroundStyle(starredNumbers.contains(q.number) ? Color.yellow : .secondary)
+                        .symbolEffect(.bounce, value: starredNumbers.contains(q.number))
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Text("\(index + 1) / \(session.count)")
                     .foregroundStyle(.secondary)
@@ -187,6 +197,16 @@ struct QuizView: View {
 
     // MARK: - 判定と進行
 
+    private func toggleStar(_ q: Question) {
+        let now = !starredNumbers.contains(q.number)
+        if now {
+            starredNumbers.insert(q.number)
+        } else {
+            starredNumbers.remove(q.number)
+        }
+        store.setStar(setID: setID, questionNumber: q.number, starred: now)
+    }
+
     private func pick(_ opt: String, correct: String, question: Question) {
         picked = opt
         let ok = opt == correct
@@ -239,9 +259,16 @@ struct QuizView: View {
                 Section("間違えた問題（\(wrong.count)問）") {
                     ForEach(wrong) { q in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("No.\(q.number)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 4) {
+                                Text("No.\(q.number)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                if starredNumbers.contains(q.number) {
+                                    Image(systemName: "star.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.yellow)
+                                }
+                            }
                             Text(q.front)
                                 .lineLimit(2)
                             Text("正解：\(q.back)")

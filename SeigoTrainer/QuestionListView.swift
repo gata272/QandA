@@ -22,9 +22,16 @@ struct QuestionListView: View {
                                 editing = q
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text("No.\(q.number)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    HStack(spacing: 4) {
+                                        Text("No.\(q.number)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                        if q.starred {
+                                            Image(systemName: "star.fill")
+                                                .font(.caption2)
+                                                .foregroundStyle(.yellow)
+                                        }
+                                    }
                                     Text(q.front)
                                         .lineLimit(2)
                                         .foregroundStyle(.primary)
@@ -39,12 +46,20 @@ struct QuestionListView: View {
                                     }
                                 }
                             }
+                            .swipeActions(edge: .leading) {
+                                Button {
+                                    store.toggleStar(setID: setID, number: q.number)
+                                } label: {
+                                    Label(q.starred ? "スターを外す" : "スター", systemImage: "star")
+                                }
+                                .tint(.yellow)
+                            }
                         }
                         .onDelete { offsets in
                             delete(at: offsets, in: set)
                         }
                     } header: {
-                        Text("タップで編集、左スワイプで削除（全\(set.questions.count)問）")
+                        Text("タップで編集、右スワイプでスター、左スワイプで削除（全\(set.questions.count)問）")
                     }
                 }
             } else {
@@ -86,6 +101,7 @@ private struct QuestionEditView: View {
     @State private var back: String
     @State private var explanation: String
     @State private var sectionName: String
+    @State private var starred: Bool
     @Environment(\.dismiss) private var dismiss
 
     init(question: Question, sections: [String], onSave: @escaping (Question) -> Void) {
@@ -96,6 +112,7 @@ private struct QuestionEditView: View {
         _back = State(initialValue: question.back)
         _explanation = State(initialValue: question.explanation)
         _sectionName = State(initialValue: question.section ?? "")
+        _starred = State(initialValue: question.starred)
     }
 
     var body: some View {
@@ -104,6 +121,9 @@ private struct QuestionEditView: View {
                 Section("問題番号") {
                     Text("No.\(question.number)")
                         .foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle("スターを付ける", isOn: $starred)
                 }
                 if !sections.isEmpty {
                     Section("セクション") {
@@ -136,7 +156,7 @@ private struct QuestionEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        onSave(Question(number: question.number, front: front, back: back, explanation: explanation, section: sectionName.isEmpty ? nil : sectionName))
+                        onSave(Question(number: question.number, front: front, back: back, explanation: explanation, section: sectionName.isEmpty ? nil : sectionName, starred: starred))
                         dismiss()
                     }
                     .disabled(front.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

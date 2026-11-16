@@ -4,11 +4,13 @@ struct SetupView: View {
     @ObservedObject var store: SetStore
     let setID: String
 
-    @State private var mode = 0 // 0: 範囲指定, 1: 全問, 2: 間違えた問題だけ
+    @State private var mode = 0 // 0: 範囲指定, 1: スター付き, 2: 間違えた問題だけ
     @State private var startNumber = 1
     @State private var endNumber = 40
     @AppStorage("seigoShuffle") private var shuffle = false
     @State private var sectionFilter = "" // "" = すべて, "__unassigned__" = 未分類, それ以外はセクション名
+    @State private var sectionExpanded = true // セクション絞り込みは開いた状態が既定
+    @State private var rangeExpanded = false // 数字の範囲指定は閉じた状態が既定
     @State private var startQuiz = false
     @State private var didInitRange = false
     @State private var screenMode = 0 // 0: 出題モード, 1: 編集モード（開いた直後は常に出題モード）
@@ -34,7 +36,7 @@ struct SetupView: View {
         var qs: [Question]
         switch mode {
         case 1:
-            qs = base.sorted { $0.number < $1.number }
+            qs = base.filter { $0.starred }.sorted { $0.number < $1.number }
         case 2:
             qs = base
                 .filter { set.stats[$0.number]?.lastCorrect == false }
@@ -80,7 +82,7 @@ struct SetupView: View {
                     Section("出題モード") {
                         Picker("出題モード", selection: $mode) {
                             Text("範囲指定").tag(0)
-                            Text("全問").tag(1)
+                            Text("スター付き").tag(1)
                             Text("間違いのみ").tag(2)
                         }
                         .pickerStyle(.segmented)
@@ -89,24 +91,40 @@ struct SetupView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        if mode == 1 && !set.questions.contains(where: { $0.starred && matchesSection($0) }) {
+                            Text("スター付きの問題はまだありません")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     if !set.sections.isEmpty {
-                        Section("セクションで絞り込む") {
-                            Picker("セクション", selection: $sectionFilter) {
-                                Text("すべて").tag("")
-                                ForEach(set.sections, id: \.self) { name in
-                                    Text(name).tag(name)
+                        Section {
+                            DisclosureGroup(isExpanded: $sectionExpanded) {
+                                Picker("セクション", selection: $sectionFilter) {
+                                    Text("すべて").tag("")
+                                    ForEach(set.sections, id: \.self) { name in
+                                        Text(name).tag(name)
+                                    }
+                                    if set.questions.contains(where: { $0.section == nil || $0.section == "" }) {
+                                        Text("未分類").tag("__unassigned__")
+                                    }
                                 }
-                                if set.questions.contains(where: { $0.section == nil || $0.section == "" }) {
-                                    Text("未分類").tag("__unassigned__")
+                                .pickerStyle(.inline)
+                            } label: {
+                                HStack {
+                                    Text("セクションで絞り込む")
+                                    Spacer()
+                                    Text(sectionFilter.isEmpty ? "すべて" : (sectionFilter == "__unassigned__" ? "未分類" : sectionFilter))
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
                     }
 
                     if mode == 0 {
-                        Section("範囲（問題番号）") {
+                        Section {
+                            DisclosureGroup(isExpanded: $rangeExpanded) {
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Text("開始")
@@ -145,6 +163,14 @@ struct SetupView: View {
                                         get: { Double(endNumber) },
                                         set: { endNumber = Int($0.rounded()) }
                                     ), in: Double(set.minNumber)...Double(set.maxNumber), step: 1)
+                                }
+                            }
+                            } label: {
+                                HStack {
+                                    Text("範囲（問題番号）")
+                                    Spacer()
+                                    Text("No.\(startNumber)〜\(endNumber)")
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                         }
@@ -207,9 +233,10 @@ struct SetupView: View {
                     if !didInitRange {
                         didInitRange = true
                         startNumber = set.minNumber
-                        endNumber = min(set.minNumber + 39, set.maxNumber)
+                        endNumber = set.maxNumber
                     }
                 }
+                .animation(.easeInOut(duration: 0.25), value: screenMode)
                 .navigationDestination(isPresented: $startQuiz) {
                     QuizView(store: store, setID: setID, questions: selectedQuestions)
                 }
@@ -240,6 +267,11 @@ struct ScopedQuestionListView: View {
                                 Text("前回ミス")
                                     .font(.caption2)
                                     .foregroundStyle(.red)
+                            }
+                            if q.starred {
+                                Image(systemName: "star.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.yellow)
                             }
                             if let sec = q.section, !sec.isEmpty {
                                 Text(sec)
