@@ -128,23 +128,36 @@ struct QuizView: View {
                             .padding(.vertical, 6)
                     }
                     .buttonStyle(.borderedProminent)
-                }
-            case .reveal:
-                if !graded {
+                } else {
                     Button {
-                        graded = true
+                        skip()
                     } label: {
-                        Text("答えと解説を見る")
+                        Text("スキップ")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.bordered)
+                }
+            case .reveal:
+                if !graded {
+                    HStack(spacing: 10) {
+                        Button {
+                            graded = true
+                        } label: {
+                            Text("答えと解説を見る")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        Button("スキップ") { skip() }
+                            .buttonStyle(.bordered)
+                    }
                 } else {
                     HStack(spacing: 10) {
                         Button {
                             selfGrade(false, question: q)
                         } label: {
-                            Text("不正解だった")
+                            Text("分からなかった")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
                         }
@@ -154,7 +167,7 @@ struct QuizView: View {
                         Button {
                             selfGrade(true, question: q)
                         } label: {
-                            Text("正解だった")
+                            Text("分かった")
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
                         }
@@ -223,6 +236,11 @@ struct QuizView: View {
         currentCorrect = ok
         results[question.number] = ok
         store.recordResult(setID: setID, questionNumber: question.number, correct: ok)
+        next()
+    }
+
+    /// 結果を記録せずに次へ進む（最後の問題なら結果画面へ）
+    private func skip() {
         next()
     }
 
