@@ -41,6 +41,7 @@ struct QuizView: View {
         }
         .navigationTitle(setName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .navigationBarBackButtonHidden(true)
     }
 

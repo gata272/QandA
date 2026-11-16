@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 /// 学習統計の画面。日ごとに「何問解いたか」を表示する。
 /// 記録は設定がオンのときだけ行われる（デフォルトはオフ）。
@@ -16,6 +17,11 @@ struct StatsView: View {
 
     private var maxAnswered: Int {
         daily.values.map { $0.answered }.max() ?? 0
+    }
+
+    /// グラフ用：古い順に並べた直近14日分
+    private var recentDays: [(key: String, stat: DayStat)] {
+        Array(sortedDays.reversed().suffix(14))
     }
 
     var body: some View {
@@ -48,6 +54,24 @@ struct StatsView: View {
                             Text("\(daily.count)日")
                                 .font(.headline)
                         }
+                    }
+
+                    Section("グラフ（直近14日）") {
+                        Chart {
+                            ForEach(recentDays, id: \.key) { item in
+                                BarMark(
+                                    x: .value("日付", date(fromKey: item.key) ?? Date()),
+                                    y: .value("問題数", item.stat.answered)
+                                )
+                                .foregroundStyle(Color.accentColor)
+                            }
+                        }
+                        .chartXAxis {
+                            AxisMarks(values: .stride(by: .day, count: 2)) { _ in
+                                AxisValueLabel(format: .dateTime.month().day(), centered: true)
+                            }
+                        }
+                        .frame(height: 180)
                     }
 
                     Section("日ごとの記録") {
@@ -97,6 +121,14 @@ struct StatsView: View {
             .font(.caption)
         }
         .padding(.vertical, 4)
+    }
+
+    private func date(fromKey key: String) -> Date? {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: key)
     }
 
     private func dateLabel(_ key: String) -> String {

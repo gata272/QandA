@@ -37,6 +37,7 @@ struct QuestionListView: View {
         }
         .navigationTitle("問題一覧・編集")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .sheet(item: $editing) { q in
             QuestionEditView(question: q, sections: set?.sections ?? [], score: set?.stats[q.number]?.score ?? 0) { updated in
                 save(updated)

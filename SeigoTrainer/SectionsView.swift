@@ -136,6 +136,7 @@ struct SectionListView: View {
         }
         .navigationTitle("セクションを管理")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
         .onAppear {
             if assignSectionName.isEmpty {
                 assignSectionName = set?.sections.first ?? ""

@@ -295,6 +295,7 @@ struct SetupView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .background(InteractivePopGestureEnabler())
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -339,6 +340,7 @@ struct ScopedQuestionListView: View {
         }
         .navigationTitle("対象の問題一覧")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
