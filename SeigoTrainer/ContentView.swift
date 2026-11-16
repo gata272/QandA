@@ -104,7 +104,6 @@ struct ContentView: View {
                 }
             }
             .environment(\.editMode, $editMode)
-            .navigationTitle("正誤トレーナー")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if !store.sets.isEmpty {

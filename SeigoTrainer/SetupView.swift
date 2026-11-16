@@ -11,6 +11,7 @@ struct SetupView: View {
     @State private var sectionFilter = "" // "" = すべて, "__unassigned__" = 未分類, それ以外はセクション名
     @State private var startQuiz = false
     @State private var didInitRange = false
+    @State private var screenMode = 0 // 0: 出題モード, 1: 編集モード（開いた直後は常に出題モード）
 
     private var set: LoadedSet? {
         store.sets.first { $0.id == setID }
@@ -54,6 +55,14 @@ struct SetupView: View {
             if let set {
                 Form {
                     Section {
+                        Picker("モード", selection: $screenMode) {
+                            Text("出題モード").tag(0)
+                            Text("編集モード").tag(1)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    Section {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(set.name).font(.headline)
                             Text("全\(set.questions.count)問（No.\(set.minNumber)〜\(set.maxNumber)）")
@@ -67,6 +76,7 @@ struct SetupView: View {
                         }
                     }
 
+                    if screenMode == 0 {
                     Section("出題モード") {
                         Picker("出題モード", selection: $mode) {
                             Text("範囲指定").tag(0)
@@ -81,14 +91,6 @@ struct SetupView: View {
                         }
                     }
 
-                    Section {
-                        NavigationLink {
-                            QuestionListView(store: store, setID: setID)
-                        } label: {
-                            Label("問題一覧・編集", systemImage: "list.bullet.rectangle")
-                        }
-                    }
-
                     if !set.sections.isEmpty {
                         Section("セクションで絞り込む") {
                             Picker("セクション", selection: $sectionFilter) {
@@ -100,14 +102,6 @@ struct SetupView: View {
                                     Text("未分類").tag("__unassigned__")
                                 }
                             }
-                        }
-                    }
-
-                    Section {
-                        NavigationLink {
-                            SectionListView(store: store, setID: setID)
-                        } label: {
-                            Label("セクションを管理", systemImage: "folder.badge.gearshape")
                         }
                     }
 
@@ -191,6 +185,22 @@ struct SetupView: View {
                             }
                         }
                         .disabled(selectedQuestions.isEmpty)
+                    }
+                    }
+
+                    if screenMode == 1 {
+                        Section("編集") {
+                            NavigationLink {
+                                QuestionListView(store: store, setID: setID)
+                            } label: {
+                                Label("問題一覧・編集", systemImage: "list.bullet.rectangle")
+                            }
+                            NavigationLink {
+                                SectionListView(store: store, setID: setID)
+                            } label: {
+                                Label("セクションを管理", systemImage: "folder.badge.gearshape")
+                            }
+                        }
                     }
                 }
                 .onAppear {
