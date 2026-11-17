@@ -14,6 +14,17 @@ struct QuizView: View {
     @State private var starredNumbers: Set<Int>
     @Environment(\.dismiss) private var dismiss
 
+    /// 片手モード: オフ / 右側 / 左側。出題の途中でも切り替えられる
+    private enum HandMode: String {
+        case off, right, left
+    }
+
+    @AppStorage("seigoHandMode") private var handModeRaw = HandMode.off.rawValue
+
+    private var handMode: HandMode {
+        HandMode(rawValue: handModeRaw) ?? .off
+    }
+
     init(store: SetStore, setID: String, questions: [Question]) {
         _store = ObservedObject(wrappedValue: store)
         self.setID = setID
@@ -58,6 +69,7 @@ struct QuizView: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(scoreColor(currentScore(for: q)))
                 Spacer()
+                handModeMenu
                 Text("\(index + 1) / \(session.count)")
                     .foregroundStyle(.secondary)
             }
@@ -68,37 +80,24 @@ struct QuizView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 6)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(q.front)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    if graded {
-                        Divider()
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let ok = currentCorrect {
-                                Label(ok ? "正解！" : "不正解", systemImage: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .font(.headline)
-                                    .foregroundStyle(ok ? Color.green : Color.red)
-                                Text("正解：\(q.back)")
-                                    .font(.headline)
-                            } else {
-                                Text("答え：\(q.back)")
-                                    .font(.headline)
-                            }
-                            if !q.explanation.isEmpty {
-                                Text(q.explanation)
-                                    .font(.callout)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            if handMode == .off {
+                ScrollView {
+                    questionContent(q)
+                }
+                bottomBar(q, mode: mode)
+            } else {
+                HStack(spacing: 0) {
+                    if handMode == .left {
+                        sideColumn(q, mode: mode)
+                    }
+                    ScrollView {
+                        questionContent(q)
+                    }
+                    if handMode == .right {
+                        sideColumn(q, mode: mode)
                     }
                 }
-                .padding()
             }
-
-            bottomBar(q, mode: mode)
         }
         .simultaneousGesture(
             DragGesture(minimumDistance: 30)
@@ -116,22 +115,43 @@ struct QuizView: View {
         )
     }
 
+    /// 問題文と（回答後の）答え・解説の表示部分。通常モードと片手モードで共用する
+    private func questionContent(_ q: Question) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(q.front)
+                .font(.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if graded {
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    if let ok = currentCorrect {
+                        Label(ok ? "正解！" : "不正解", systemImage: ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .font(.headline)
+                            .foregroundStyle(ok ? Color.green : Color.red)
+                        Text("正解：\(q.back)")
+                            .font(.headline)
+                    } else {
+                        Text("答え：\(q.back)")
+                            .font(.headline)
+                    }
+                    if !q.explanation.isEmpty {
+                        Text(q.explanation)
+                            .font(.callout)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding()
+    }
+
     @ViewBuilder
     private func bottomBar(_ q: Question, mode: AnswerMode) -> some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
                 Spacer()
-                Button {
-                    toggleStar(q)
-                } label: {
-                    Image(systemName: starredNumbers.contains(q.number) ? "star.fill" : "star")
-                        .font(.title2)
-                        .foregroundStyle(starredNumbers.contains(q.number) ? Color.yellow : .secondary)
-                        .symbolEffect(.bounce, value: starredNumbers.contains(q.number))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                starButton(q)
                 Button("やめる") { dismiss() }
                     .buttonStyle(.bordered)
             }
@@ -237,6 +257,153 @@ struct QuizView: View {
                 .foregroundStyle(fg)
         }
         .disabled(graded)
+    }
+
+    /// 片手モードの切り替えメニュー（ヘッダーに常駐し、出題中でも変更できる）
+    private var handModeMenu: some View {
+        Menu {
+            Button {
+                handModeRaw = HandMode.off.rawValue
+            } label: {
+                if handMode == .off {
+                    Label("オフ", systemImage: "checkmark")
+                } else {
+                    Text("オフ")
+                }
+            }
+            Button {
+                handModeRaw = HandMode.right.rawValue
+            } label: {
+                if handMode == .right {
+                    Label("右側", systemImage: "checkmark")
+                } else {
+                    Text("右側")
+                }
+            }
+            Button {
+                handModeRaw = HandMode.left.rawValue
+            } label: {
+                if handMode == .left {
+                    Label("左側", systemImage: "checkmark")
+                } else {
+                    Text("左側")
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "hand.raised.fill")
+                Text(handMode == .off ? "片手" : (handMode == .right ? "右側" : "左側"))
+            }
+            .font(.subheadline)
+        }
+    }
+
+    private func starButton(_ q: Question, compact: Bool = false) -> some View {
+        Button {
+            toggleStar(q)
+        } label: {
+            Image(systemName: starredNumbers.contains(q.number) ? "star.fill" : "star")
+                .font(compact ? .title3 : .title2)
+                .foregroundStyle(starredNumbers.contains(q.number) ? Color.yellow : .secondary)
+                .symbolEffect(.bounce, value: starredNumbers.contains(q.number))
+                .frame(width: compact ? 36 : 44, height: compact ? 36 : 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 片手モード時の側面コラム。上から、スターとやめるボタン、その下に回答ボタン。
+    /// 答えを見る形式では、正解／スキップ／不正解の順に並べる
+    private func sideColumn(_ q: Question, mode: AnswerMode) -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 6) {
+                starButton(q, compact: true)
+                Button("やめる") { dismiss() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+
+            Divider()
+
+            switch mode {
+            case .choice(let options, let correct):
+                VStack(spacing: 10) {
+                    ForEach(options, id: \.self) { opt in
+                        optionButton(opt, correct: correct, question: q)
+                    }
+                }
+                if graded {
+                    sideNextButton
+                } else {
+                    Button {
+                        skipAndReveal()
+                    } label: {
+                        Text("スキップ")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            case .reveal:
+                if !graded {
+                    Button {
+                        graded = true
+                    } label: {
+                        Text("答えと解説を見る")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Button {
+                        selfGrade(true, question: q)
+                    } label: {
+                        Text("正解")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+
+                    Button {
+                        skip()
+                    } label: {
+                        Text("スキップ")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.bordered)
+
+                    Button {
+                        selfGrade(false, question: q)
+                    } label: {
+                        Text("不正解")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 8)
+        .frame(width: 116)
+        .background(.bar)
+    }
+
+    private var sideNextButton: some View {
+        Button {
+            next()
+        } label: {
+            Text(index + 1 < session.count ? "次の問題へ" : "結果を見る")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .multilineTextAlignment(.center)
+        }
+        .buttonStyle(.borderedProminent)
     }
 
     // MARK: - 判定と進行
